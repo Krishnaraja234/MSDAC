@@ -5,6 +5,8 @@ __pycache__/
 
 # C extensions
 *.so
+# Keep the bundled ODA File Converter's shared libraries (needed at runtime)
+!ODAFileConverter/squashfs-root/**/*.so
 
 # Distribution / packaging
 .Python
@@ -15,6 +17,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+# Keep the ODA File Converter's lib directory (bundled runtime, not a build artifact)
+!ODAFileConverter/squashfs-root/usr/lib/
 lib64/
 parts/
 sdist/
