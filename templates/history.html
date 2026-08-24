@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My File History</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Space Grotesk', sans-serif;
+            color: aliceblue;
+            background:
+                radial-gradient(circle at 15% 20%, rgba(255,59,59,0.02), transparent 40%),
+                radial-gradient(circle at 85% 15%, rgba(255,176,32,0.02), transparent 45%),
+                radial-gradient(circle at 50% 90%, rgba(46,230,166,0.02), transparent 45%),
+                #263353;
+            padding: 2rem 1rem;
+            box-sizing: border-box;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        .track {
+            position: fixed;
+            inset: 0;
+            background-image: repeating-linear-gradient(
+                to bottom,
+                transparent 0 38px,
+                rgba(125,138,168,0.08) 38px 40px
+            );
+            animation: drift 6s linear infinite;
+            z-index: 0;
+            pointer-events: none;
+        }
+        @keyframes drift { from { background-position: 0 0; } to { background-position: 0 40px; } }
+
+        .wrap {
+            position: relative;
+            z-index: 1;
+            width: min(1400px, 96%);
+            margin: 0 auto;
+            background: linear-gradient(180deg, #101a2e, #0c1526);
+            border: 1px solid rgba(255,255,255,0.06);
+            box-shadow: 0 30px 60px -20px rgba(0,0,0,0.6);
+            border-radius: 1.5em;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .signals {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 18px;
+        }
+        .lamp { width: 12px; height: 12px; border-radius: 50%; }
+        .lamp.red { background: #ff3b3b; box-shadow: 0 0 12px 2px rgba(255,59,59,0.7); }
+        .lamp.amber { background: #ffb020; box-shadow: 0 0 12px 2px rgba(255,176,32,0.7); animation: blink 1.6s ease-in-out infinite; }
+        .lamp.green { background: #2ee6a6; box-shadow: 0 0 12px 2px rgba(46,230,166,0.7); }
+        @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.25; } }
+
+        .top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            margin: 0;
+        }
+
+        .top-row a {
+            color: #60a5fa;
+            text-decoration: none;
+            border: 1px solid #60a5fa;
+            border-radius: 4px;
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            margin-left: 8px;
+        }
+
+        table {
+            width: 100%;
+            table-layout: fixed;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 8px 10px;
+            font-size: 0.85rem;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .group {
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        .group summary {
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.03);
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .group summary::-webkit-details-marker { display: none; }
+
+        .group-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .group-count {
+            font-size: 0.75rem;
+            color: #64748b;
+            background: #0c1526;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .chevron {
+            transition: transform 0.15s ease;
+            color: #94a3b8;
+        }
+        .group[open] .chevron { transform: rotate(180deg); }
+
+        .group table {
+            margin-top: 0;
+        }
+        .group th, .group td {
+            border-bottom: 1px solid #1e293b;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+        .group th:nth-child(1), .group td:nth-child(1) { width: 20%; }
+        .group th:nth-child(2), .group td:nth-child(2) { width: 15%; }
+        .group th:nth-child(3), .group td:nth-child(3) { width: 50%; }
+        .group th:nth-child(4), .group td:nth-child(4) { width: 15%; white-space: nowrap; }
+
+        th {
+            color: #94a3b8;
+            font-weight: normal;
+        }
+
+        td a {
+            color: #4ade80;
+            text-decoration: none;
+            border: 1px solid #4ade80;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 0.8rem;
+        }
+
+        td a:hover {
+            background-color: rgba(74, 222, 128, 0.15);
+        }
+
+        .empty {
+            color: #64748b;
+            font-size: 0.85rem;
+            font-style: italic;
+            margin-top: 0.8rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="track"></div>
+    <div class="wrap">
+        <div class="signals">
+            <span class="lamp red"></span>
+            <span class="lamp amber"></span>
+            <span class="lamp green"></span>
+        </div>
+        <div class="top-row">
+            <h1>My File History</h1>
+            {% if is_admin %}
+            <a href="/admin" style="display:inline-block; margin-bottom:1rem; color:#4ade80; text-decoration:none; border:1px solid #4ade80; border-radius:6px; padding:6px 14px; font-size:0.85rem;">View Admin Panel &rarr;</a>
+            {% endif %}
+            <div>
+                <a href="/">Back to Tool</a>
+                <a href="/logout">Log out</a>
+            </div>
+        </div>
+
+        {% if grouped_history %}
+        {% for group in grouped_history %}
+        <details class="group" {% if loop.first %}open{% endif %}>
+            <summary>
+                <div class="group-label">
+                    <span>{{ group.hut_name or 'No HUT name' }}</span>
+                    <span style="color:#64748b;">{{ group.section or 'No section' }}</span>
+                    <span class="group-count">{{ group.jobs|length }} job{{ 's' if group.jobs|length != 1 else '' }}</span>
+                </div>
+                <span class="chevron">&#9660;</span>
+            </summary>
+            <table>
+                <tr><th>Date</th><th>Type</th><th>File</th><th></th></tr>
+                {% for h in group.jobs %}
+                <tr>
+                    <td>{{ h.created_at }}</td>
+                    <td>{{ h.job_type.capitalize() }}</td>
+                    <td>{{ h.download_name }}</td>
+                    <td><a href="/api/download/{{ h.job_id }}">Download</a></td>
+                </tr>
+                {% endfor %}
+            </table>
+        </details>
+        {% endfor %}
+        {% else %}
+        <p class="empty">No files generated yet.</p>
+        {% endif %}
+    </div>
+</body>
+
+</html>

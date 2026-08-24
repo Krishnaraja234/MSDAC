@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Re-template Drawings — MSDAC IFC Generator</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    body {
+        background:
+            radial-gradient(circle at 15% 20%, rgba(255,59,59,0.02), transparent 40%),
+            radial-gradient(circle at 85% 15%, rgba(255,176,32,0.02), transparent 45%),
+            radial-gradient(circle at 50% 90%, rgba(46,230,166,0.02), transparent 45%),
+            #263353;
+        margin:0; padding:2rem; font-family:'Space Grotesk',sans-serif;
+        position:relative; overflow-x:hidden;
+    }
+    .track {
+        position: fixed; inset: 0;
+        background-image: repeating-linear-gradient(to bottom, transparent 0 38px, rgba(125,138,168,0.08) 38px 40px);
+        animation: drift 6s linear infinite;
+        z-index: 0; pointer-events: none;
+    }
+    @keyframes drift { from { background-position: 0 0; } to { background-position: 0 40px; } }
+    .signals { display:flex; gap:10px; justify-content:center; margin-bottom:14px; }
+    .lamp { width:12px; height:12px; border-radius:50%; }
+    .lamp.red { background:#ff3b3b; box-shadow:0 0 12px 2px rgba(255,59,59,0.7); }
+    .lamp.amber { background:#ffb020; box-shadow:0 0 12px 2px rgba(255,176,32,0.7); animation:blink 1.6s ease-in-out infinite; }
+    .lamp.green { background:#2ee6a6; box-shadow:0 0 12px 2px rgba(46,230,166,0.7); }
+    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.25; } }
+</style>
+</head>
+<body>
+<div class="track"></div>
+
+<div style="position:relative; z-index:1; background: linear-gradient(180deg, #101a2e, #0c1526); border:1px solid rgba(255,255,255,0.06); box-shadow:0 30px 60px -20px rgba(0,0,0,0.6); border-radius:1.2em; padding:1.5rem; max-width:520px; margin:0 auto; color:aliceblue;">
+
+    <div class="signals">
+        <span class="lamp red"></span>
+        <span class="lamp amber"></span>
+        <span class="lamp green"></span>
+    </div>
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem; padding-bottom:1rem; border-bottom:1px solid #1e293b;">
+        <span style="font-size:0.95rem; color:#e2e8f0;">Re-template existing drawings</span>
+        <a href="/" style="font-size:0.8rem; color:#60a5fa; text-decoration:none;">&larr; Back to main page</a>
+    </div>
+
+    <div style="margin-bottom:1rem;">
+        <label style="display:block; font-size:0.85rem; margin-bottom:0.4rem; color:#cbd5e1;">Target files (existing drawings to update)</label>
+        <input type="file" id="target-files" multiple accept=".dxf,.dwg" style="width:100%; box-sizing:border-box; background:#1e293b; border:1px solid #334155; color:aliceblue; border-radius:6px; padding:8px 10px; font-size:0.8rem; font-family:inherit;">
+    </div>
+
+    <div style="margin-bottom:1rem;">
+        <label style="display:block; font-size:0.85rem; margin-bottom:0.4rem; color:#cbd5e1;">New template file</label>
+        <input type="file" id="new-template" accept=".dxf,.dwg" style="width:100%; box-sizing:border-box; background:#1e293b; border:1px solid #334155; color:aliceblue; border-radius:6px; padding:8px 10px; font-size:0.8rem; font-family:inherit;">
+    </div>
+
+    <div style="margin-bottom:1.25rem;">
+        <label style="display:block; font-size:0.85rem; margin-bottom:0.4rem; color:#cbd5e1;">Old title-block name to replace</label>
+        <input type="text" id="old-block-name" placeholder="e.g. TITLE_OLD" style="width:100%; box-sizing:border-box; background:#1e293b; border:1px solid #334155; color:aliceblue; border-radius:6px; padding:8px 10px; font-size:0.85rem; font-family:inherit;">
+    </div>
+
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.75rem; padding:0.6rem 0.8rem; background:#1e293b; border-radius:6px;">
+        <input type="checkbox" id="retemplate-generate-index" style="accent-color:#4ade80;">
+        <label for="retemplate-generate-index" style="font-size:0.85rem; color:#cbd5e1;">Also generate INDEX for this run</label>
+    </div>
+
+    <button id="apply-btn" style="width:100%; box-sizing:border-box; display:flex; align-items:center; justify-content:center; gap:0.5rem; border:1px solid #4ade80; color:#4ade80; border-radius:8px; padding:10px 12px; font-size:0.9rem; background:transparent; cursor:pointer; font-family:inherit;">
+        Apply new template
+    </button>
+
+    <div id="progress-area" style="display:none; margin-top:1rem;">
+        <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:#94a3b8; margin-bottom:0.3rem;">
+            <span id="progress-current-file">Starting…</span>
+            <span id="progress-percent">0%</span>
+        </div>
+        <div style="background:#1e293b; border-radius:6px; height:8px; overflow:hidden;">
+            <div id="progress-bar-fill" style="background:#4ade80; height:100%; width:0%; transition:width 0.3s;"></div>
+        </div>
+    </div>
+
+    <div id="result-area" style="margin-top:1rem; font-size:0.8rem; color:#94a3b8;"></div>
+
+</div>
+
+<script>
+    const targetFilesInput = document.getElementById('target-files');
+    const newTemplateInput = document.getElementById('new-template');
+    const oldBlockNameInput = document.getElementById('old-block-name');
+    const generateIndexInput = document.getElementById('retemplate-generate-index');
+    const applyBtn = document.getElementById('apply-btn');
+    const resultArea = document.getElementById('result-area');
+    const progressArea = document.getElementById('progress-area');
+    const progressBarFill = document.getElementById('progress-bar-fill');
+    const progressPercent = document.getElementById('progress-percent');
+    const progressCurrentFile = document.getElementById('progress-current-file');
+
+    function pollStatus(jobId) {
+        const timer = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/status/${jobId}`);
+                const status = await res.json();
+
+                if (status.state === 'processing' || status.state === 'queued') {
+                    progressBarFill.style.width = `${status.progress || 0}%`;
+                    progressPercent.textContent = `${status.progress || 0}%`;
+                    progressCurrentFile.textContent = status.current_file
+                        ? `Processing: ${status.current_file}`
+                        : 'Starting…';
+                    return;
+                }
+
+                clearInterval(timer);
+                progressArea.style.display = 'none';
+                applyBtn.disabled = false;
+                applyBtn.textContent = 'Apply new template';
+
+                if (status.state === 'error') {
+                    resultArea.style.color = '#f87171';
+                    resultArea.textContent = `Error: ${status.error || 'unknown error'}`;
+                } else if (status.state === 'done') {
+                    resultArea.style.color = '#94a3b8';
+                    resultArea.innerHTML = `Updated ${status.updated_count} file(s). <a href="/api/download/${jobId}" style="color:#4ade80;">Download result</a>`;
+                }
+            } catch (err) {
+                clearInterval(timer);
+                progressArea.style.display = 'none';
+                applyBtn.disabled = false;
+                applyBtn.textContent = 'Apply new template';
+                resultArea.style.color = '#f87171';
+                resultArea.textContent = `Error: ${err.message}`;
+            }
+        }, 700);
+    }
+
+    applyBtn.addEventListener('click', async () => {
+        if (!targetFilesInput.files.length) {
+            alert('Please choose at least one target file.');
+            return;
+        }
+        if (!newTemplateInput.files.length) {
+            alert('Please choose the new template file.');
+            return;
+        }
+        if (!oldBlockNameInput.value.trim()) {
+            alert('Please enter the old title-block name to replace.');
+            return;
+        }
+
+        applyBtn.disabled = true;
+        applyBtn.textContent = 'Submitting…';
+        resultArea.textContent = '';
+        progressArea.style.display = 'block';
+        progressBarFill.style.width = '0%';
+        progressPercent.textContent = '0%';
+        progressCurrentFile.textContent = 'Starting…';
+
+        const formData = new FormData();
+        for (const f of targetFilesInput.files) {
+            formData.append('target_files', f);
+        }
+        formData.append('new_template', newTemplateInput.files[0]);
+        formData.append('old_block_name', oldBlockNameInput.value.trim());
+        formData.append('generate_index', generateIndexInput.checked ? '1' : '0');
+
+        try {
+            const res = await fetch('/api/retemplate', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (!res.ok) {
+                applyBtn.disabled = false;
+                applyBtn.textContent = 'Apply new template';
+                progressArea.style.display = 'none';
+                resultArea.style.color = '#f87171';
+                resultArea.textContent = `Error: ${data.error || 'unknown error'}`;
+                return;
+            }
+            applyBtn.textContent = 'Processing…';
+            pollStatus(data.job_id);
+        } catch (err) {
+            applyBtn.disabled = false;
+            applyBtn.textContent = 'Apply new template';
+            progressArea.style.display = 'none';
+            resultArea.style.color = '#f87171';
+            resultArea.textContent = `Error: ${err.message}`;
+        }
+    });
+</script>
+
+</body>
+</html>

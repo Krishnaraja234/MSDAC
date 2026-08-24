@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSDAC IFC Generator</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Space Grotesk', sans-serif;
+            background:
+                radial-gradient(circle at 15% 20%, rgba(255,59,59,0.02), transparent 40%),
+                radial-gradient(circle at 85% 15%, rgba(255,176,32,0.02), transparent 45%),
+                radial-gradient(circle at 50% 90%, rgba(46,230,166,0.02), transparent 45%),
+                #263353;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            box-sizing: border-box;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        .track {
+            position: fixed;
+            inset: 0;
+            background-image: repeating-linear-gradient(
+                to bottom,
+                transparent 0 38px,
+                rgba(125,138,168,0.08) 38px 40px
+            );
+            animation: drift 6s linear infinite;
+            z-index: 0;
+            pointer-events: none;
+        }
+        @keyframes drift {
+            from { background-position: 0 0; }
+            to { background-position: 0 40px; }
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            width: min(1300px, 96%);
+            background: linear-gradient(180deg, #101a2e, #0c1526);
+            border: 1px solid rgba(255,255,255,0.06);
+            box-shadow: 0 30px 60px -20px rgba(0,0,0,0.6);
+            border-radius: 2em;
+            padding: clamp(1.5rem, 5vw, 2rem);
+            box-sizing: border-box;
+        }
+
+        .signals {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 14px;
+        }
+        .lamp {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .lamp.red    { background: #ff3b3b; box-shadow: 0 0 12px 2px rgba(255,59,59,0.7); }
+        .lamp.amber  { background: #ffb020; box-shadow: 0 0 12px 2px rgba(255,176,32,0.7); animation: blink 1.6s ease-in-out infinite; }
+        .lamp.green  { background: #2ee6a6; box-shadow: 0 0 12px 2px rgba(46,230,166,0.7); }
+        @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.25; } }
+
+        h3 {
+            margin: 0 0 1.5rem 0;
+            color: aliceblue;
+            text-align: center;
+            font-size: clamp(0.9rem, 3vw, 1.1rem);
+            letter-spacing: 0.05em;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-bottom: 0.6rem;
+        }
+
+        .field-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.6rem 0.8rem;
+            margin-bottom: 0.8rem;
+        }
+        .field-grid .field {
+            margin-bottom: 0;
+        }
+        .field-grid label {
+            font-size: 0.7rem;
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.8rem;
+            padding: 0.5rem 0;
+        }
+        .toggle-row-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            padding: 0.6rem 0;
+            margin-bottom: 0.6rem;
+            border-top: 1px solid #1e293b;
+            border-bottom: 1px solid #1e293b;
+        }
+
+        /* Toggle switch: the underlying <input type="checkbox"> stays
+           exactly as before (same id, same .checked JS reads) - this
+           only restyles its visual appearance. */
+        input[type="checkbox"].toggle-switch {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 40px;
+            height: 22px;
+            border-radius: 11px;
+            background: rgba(255,255,255,0.12);
+            position: relative;
+            cursor: pointer;
+            margin: 0;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+        input[type="checkbox"].toggle-switch::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #7d8aa8;
+            transition: transform 0.2s, background 0.2s;
+        }
+        input[type="checkbox"].toggle-switch:checked {
+            background: #2ee6a6;
+        }
+        input[type="checkbox"].toggle-switch:checked::before {
+            background: #0b1220;
+            transform: translateX(18px);
+        }
+
+        /* 3-position slider for script type - AutoCAD / Both / ArES CAD, no Off */
+        .slider3 {
+            position: relative;
+            display: flex;
+            width: 180px;
+            height: 26px;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 13px;
+            background: rgba(255,255,255,0.03);
+            overflow: hidden;
+        }
+        .slider3 input[type="radio"] {
+            display: none;
+        }
+        .slider3 label {
+            flex: 1;
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            padding: 5px 4px;
+            font-size: 0.62rem;
+            color: #7d8aa8;
+            cursor: pointer;
+            margin: 0;
+            text-transform: none;
+            letter-spacing: 0;
+            transition: color 0.2s;
+        }
+        .slider3 input[type="radio"]:checked + label {
+            color: #0b1220;
+            font-weight: 600;
+        }
+        .slider3-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: calc(33.333% - 2px);
+            height: 22px;
+            border-radius: 11px;
+            background: #2ee6a6;
+            transition: transform 0.2s;
+            z-index: 0;
+        }
+
+        /* Top-right collapsible menu */
+        .menu-wrap {
+            position: absolute;
+            top: 1.2rem;
+            right: 1.2rem;
+            z-index: 20;
+        }
+        .menu-toggle {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: #101a2e;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #e8edf7;
+            font-size: 18px;
+        }
+        .menu-dropdown {
+            display: none;
+            position: absolute;
+            top: 40px;
+            right: 0;
+            background: #101a2e;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 0.4rem;
+            width: 190px;
+            flex-direction: column;
+            gap: 2px;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.4);
+        }
+        .menu-dropdown.open {
+            display: flex;
+        }
+        .menu-dropdown a {
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            color: #cbd5e1;
+            text-decoration: none;
+        }
+        .menu-dropdown a:hover {
+            background: rgba(255,255,255,0.06);
+        }
+        .menu-dropdown a.danger {
+            color: #ff3b3b;
+        }
+
+        label {
+            color: aliceblue;
+            font-size: clamp(0.75rem, 2.5vw, 0.9rem);
+        }
+
+        input[type="file"] {
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: clamp(0.75rem, 2.5vw, 0.85rem);
+            border: 1px solid #334155;
+            background-color: #1e293b;
+            color: aliceblue;
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="file"]:focus {
+            border-color: #60a5fa;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 8px;
+            padding: 6px 10px;
+            height: 2.2em;
+            font-size: clamp(0.75rem, 2.5vw, 0.85rem);
+            border: 1px solid #334155;
+            background-color: #1e293b;
+            color: aliceblue;
+            outline: none;
+            font-family: Verdana, Geneva, Tahoma, sans-serif;
+        }
+
+        input[type="text"]:focus {
+            border-color: #60a5fa;
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 0.6rem;
+        }
+
+        input[type="checkbox"] {
+            width: 1.1em;
+            height: 1.1em;
+            accent-color: #60a5fa;
+            cursor: pointer;
+        }
+
+        .buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .btn-fullwidth {
+            grid-column: 1 / -1;
+            margin-top: 0.6rem;
+        }
+
+        .buttons button {
+            position: relative;
+            padding: 10px 8px 10px 30px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+            background-color: #1e293b;
+            color: #cbd5e1;
+            font-size: clamp(0.62rem, 1.8vw, 0.72rem);
+            font-family: Verdana, Geneva, Tahoma, sans-serif;
+            cursor: pointer;
+            box-sizing: border-box;
+            text-align: left;
+            transition: background 0.2s, border-color 0.2s, transform 0.1s, color 0.2s;
+            line-height: 1.3;
+        }
+
+        .buttons button .btn-icon {
+            position: absolute;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.1rem;
+        }
+
+        .buttons button:hover {
+            transform: translateY(-2px);
+            color: #f1f5f9;
+        }
+
+        .buttons button:active {
+            transform: scale(0.97);
+        }
+
+        .btn-signal {
+            border-left: 3px solid #f59e0b;
+        }
+
+        .btn-signal:hover {
+            background-color: #1c1a0f;
+            border-color: #f59e0b;
+        }
+
+        .btn-track {
+            border-left: 3px solid #34d399;
+        }
+
+        .btn-track:hover {
+            background-color: #0b1a14;
+            border-color: #34d399;
+        }
+
+        .btn-custom {
+            border-left: 3px solid #a78bfa;
+        }
+
+        .btn-custom:hover {
+            background-color: #130f1e;
+            border-color: #a78bfa;
+        }
+
+        .btn-azr {
+            border-left: 3px solid #fb923c;
+        }
+
+        .btn-azr:hover {
+            background-color: #1a0f09;
+            border-color: #fb923c;
+        }
+
+        .btn-relayrack {
+            border-left: 3px solid #34d399;
+        }
+
+        .btn-relayrack:hover {
+            background-color: #0b1a14;
+            border-color: #34d399;
+        }
+
+        .btn-communication {
+            border-left: 3px solid #38bdf8;
+        }
+
+        .btn-communication:hover {
+            background-color: #0a1a24;
+            border-color: #38bdf8;
+        }
+
+        .btn-sdf {
+            border-left: 3px solid #a78bfa;
+        }
+
+        .btn-sdf:hover {
+            background-color: #150f24;
+            border-color: #a78bfa;
+        }
+
+        .btn-datalogger {
+            border-left: 3px solid #fbbf24;
+        }
+
+        .btn-datalogger:hover {
+            background-color: #241d0a;
+            border-color: #fbbf24;
+        }
+
+        .btn-ifc {
+            grid-column: 1 / -1;
+            padding: 12px 12px 12px 44px;
+            background: linear-gradient(135deg, #1e3a5f, #0f172a);
+            border: 1px solid #3b82f6;
+            border-left: 3px solid #60a5fa;
+            color: #bfdbfe;
+            font-size: clamp(0.8rem, 2.5vw, 0.9rem);
+            letter-spacing: 0.03em;
+        }
+
+        .btn-ifc:hover {
+            background: linear-gradient(135deg, #1e40af, #1e3a5f);
+            border-color: #60a5fa;
+            color: #e0f2fe;
+        }
+
+        @media (max-width: 480px) {
+            .field-grid {
+                grid-template-columns: 1fr;
+            }
+            .buttons {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="track"></div>
+    <div class="container">
+        <div class="signals">
+            <span class="lamp red"></span>
+            <span class="lamp amber"></span>
+            <span class="lamp green"></span>
+        </div>
+        <div class="menu-wrap">
+            <div class="menu-toggle" id="menu-toggle-btn">&#9776;</div>
+            <div class="menu-dropdown" id="menu-dropdown">
+                <a href="/history">My History</a>
+                <a href="/retemplate">Re-template Drawings</a>
+                <a href="/change-password">Change Password</a>
+                {% if session.is_admin %}
+                <a href="/admin">Admin Panel</a>
+                {% endif %}
+                <a href="/logout" class="danger">Log out</a>
+            </div>
+        </div>
+        <h3>MSDAC IFC GENERATOR</h3>
+        <form action="submit">
+
+            <div class="field-grid">
+                <div class="field">
+                    <label for="excel-upload">Upload Excel</label>
+                    <input type="file" id="excel-upload" accept=".xlsx,.xls">
+                </div>
+
+                <div class="field">
+                    <label for="template-upload">Upload Template</label>
+                    <input type="file" id="template-upload" accept=".dwg">
+                </div>
+
+                <div class="field">
+                    <label for="filename-pattern">File Name Pattern</label>
+                    <input type="text" id="filename-pattern" placeholder="e.g. PROJ_[]">
+                </div>
+
+                <div class="field">
+                    <label for="hut-name">HUT Name</label>
+                    <input type="text" id="hut-name" placeholder="e.g. HUT1">
+                </div>
+
+                <div class="field">
+                    <label for="section">Section</label>
+                    <input type="text" id="section" placeholder="e.g. SECTION-A">
+                </div>
+
+                <div class="field">
+                    <label for="custom-typicals-upload">Custom Typicals</label>
+                    <input type="file" id="custom-typicals-upload" accept=".zip,.rar">
+                </div>
+            </div>
+
+            <div class="toggle-row-wrap">
+                <div class="toggle-row">
+                    <label for="relay-position" style="margin:0; text-transform:none; letter-spacing:0; font-size:0.8rem; color:#cbd5e1;">Relay Position</label>
+                    <input type="checkbox" id="relay-position" class="toggle-switch">
+                </div>
+                <div class="toggle-row">
+                    <span style="font-size:0.8rem; color:#cbd5e1;">Script output (Full IFC only)</span>
+                    <div class="slider3" id="script-slider">
+                        <div class="slider3-thumb" id="script-slider-thumb"></div>
+                        <input type="radio" name="script_type" id="script-autocad" value="autocad">
+                        <label for="script-autocad">AutoCAD</label>
+                        <input type="radio" name="script_type" id="script-both" value="both" checked>
+                        <label for="script-both">Both</label>
+                        <input type="radio" name="script_type" id="script-arescad" value="arescad">
+                        <label for="script-arescad">ArES CAD</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="buttons">
+                <button type="submit" class="btn-signal" title="Generate signal circuit">
+                    <span class="btn-icon">⚡</span>Generate Signal
+                </button>
+                <button type="submit" class="btn-track" title="Generate track circuit">
+                    <span class="btn-icon">🛤</span>Generate Track
+                </button>
+                <button type="submit" class="btn-custom" title="Generate custom circuit">
+                    <span class="btn-icon">⚙️</span>Generate Custom
+                </button>
+                <button type="submit" class="btn-azr" title="Generate AR & AZR circuit">
+                    <span class="btn-icon">🔁</span>Generate AR &amp; AZR
+                </button>
+                <button type="submit" class="btn-relayrack" title="Generate relay rack layout">
+                    <span class="btn-icon">🗄️</span>Generate Relay Rack
+                </button>
+                <button type="submit" class="btn-communication" title="Generate communication circuit">
+                    <span class="btn-icon">📡</span>Generate Communication
+                </button>
+                <button type="submit" class="btn-sdf" title="Generate SDF circuits">
+                    <span class="btn-icon">⏱️</span>Generate SDF
+                </button>
+                <button type="submit" class="btn-datalogger" title="Generate Data Logger circuits">
+                    <span class="btn-icon">📊</span>Generate Data Logger
+                </button>
+                <button type="submit" class="btn-ifc btn-fullwidth" title="Generate IFC">
+                    <span class="btn-icon">📦</span>Generate Full IFC
+                </button>
+            </div>
+
+        </form>
+    </div>
+
+    <script>
+        const form = document.querySelector('form');
+        const excelInput = document.getElementById('excel-upload');
+        const templateInput = document.getElementById('template-upload');
+        const customTypicalsInput = document.getElementById('custom-typicals-upload');
+        const patternInput = document.getElementById('filename-pattern');
+        const hutNameInput = document.getElementById('hut-name');
+        const sectionInput = document.getElementById('section');
+        const relayPositionInput = document.getElementById('relay-position');
+
+        (function wireScriptSlider() {
+            const thumb = document.getElementById('script-slider-thumb');
+            const radios = document.querySelectorAll('input[name="script_type"]');
+            const positions = { autocad: 0, both: 1, arescad: 2 };
+            function updateThumb() {
+                const checked = document.querySelector('input[name="script_type"]:checked');
+                const idx = checked ? positions[checked.value] : 1;
+                thumb.style.transform = `translateX(${idx * 100}%)`;
+            }
+            radios.forEach(r => r.addEventListener('change', updateThumb));
+            updateThumb();
+        })();
+
+        form.addEventListener('submit', (e) => e.preventDefault());
+
+        (function wireMenuToggle() {
+            const toggleBtn = document.getElementById('menu-toggle-btn');
+            const dropdown = document.getElementById('menu-dropdown');
+            toggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdown.classList.toggle('open');
+            });
+            document.addEventListener('click', (e) => {
+                if (!dropdown.contains(e.target) && e.target !== toggleBtn) {
+                    dropdown.classList.remove('open');
+                }
+            });
+        })();
+
+        const STAGE_LABELS = {
+            queued: 'Queued…',
+            preparing_template: 'Preparing template…',
+            reading_excel: 'Reading Excel…',
+            generating_dxf: 'Generating…',
+            converting_dwg: 'Finalizing drawing…',
+            zipping: 'Packaging…',
+            awaiting_confirmation: 'Waiting for your confirmation…',
+            awaiting_contact_choice: 'Waiting for you to pick a contact…',
+            cancelled: 'Cancelled',
+        };
+
+        function wireGenerateButton(btnSelector, uploadUrl, icon, requiresTemplate = true) {
+            const btn = document.querySelector(btnSelector);
+            const defaultHTML = btn.innerHTML;
+
+            function setText(text) {
+                btn.innerHTML = `<span class="btn-icon">${icon}</span>${text}`;
+            }
+            function reset() {
+                btn.innerHTML = defaultHTML;
+                btn.disabled = false;
+            }
+
+            btn.addEventListener('click', async () => {
+                if (!excelInput.files.length) {
+                    alert('Please upload the Excel workbook first.');
+                    return;
+                }
+                if (requiresTemplate && !templateInput.files.length) {
+                    alert('Please upload a border/title-block template first.');
+                    return;
+                }
+
+                btn.disabled = true;
+                setText('Starting…');
+
+                const formData = new FormData();
+                formData.append('file', excelInput.files[0]);
+                if (requiresTemplate) {
+                    formData.append('template', templateInput.files[0]);
+                }
+                formData.append('filename_pattern', patternInput.value || '');
+                formData.append('hut_name', hutNameInput.value || '');
+                formData.append('section', sectionInput.value || '');
+                formData.append('relay_position', relayPositionInput.checked ? '1' : '0');
+                const checkedScriptType = document.querySelector('input[name="script_type"]:checked');
+                formData.append('script_type', checkedScriptType ? checkedScriptType.value : '');
+
+                try {
+                    const res = await fetch(uploadUrl, { method: 'POST', body: formData });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Upload failed');
+                    pollStatus(data.job_id, setText, reset);
+                } catch (err) {
+                    alert(err.message);
+                    reset();
+                }
+            });
+        }
+
+        function pollStatus(jobId, setText, reset) {
+            let confirmationHandled = false;
+            let lastShownConflictKey = null;
+            const timer = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/status/${jobId}`);
+                    const job = await res.json();
+                    if (!res.ok) throw new Error(job.error || 'Status check failed');
+
+                    const label = STAGE_LABELS[job.state] || job.state;
+                    const pct = job.progress ?? 0;
+                    setText(`${label} ${pct}%`);
+
+                    if (job.state === 'awaiting_confirmation') {
+                        if (!confirmationHandled) {
+                            confirmationHandled = true;
+                            const proceed = confirm(job.confirmation_message || 'Proceed with generation?');
+                            fetch(`/api/confirm/${jobId}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ proceed }),
+                            }).catch(() => {});
+                        }
+                        return; // don't re-prompt every poll tick while awaiting the answer
+                    }
+                    confirmationHandled = false;
+
+                    if (job.state === 'awaiting_contact_choice') {
+                        const options = job.conflict_options || [];
+                        const occurrences = job.conflict_occurrences || [];
+                        const conflictKey = job.conflict_relay + '|' + (job.conflict_code || '') + '|' + options.join(',') + '|' + occurrences.map(o => o.sheet_number).join(',');
+
+                        if (lastShownConflictKey !== conflictKey) {
+                            lastShownConflictKey = conflictKey;
+
+                            const modal = document.getElementById('contactChoiceModal');
+                            const relayEl = document.getElementById('contactChoiceRelay');
+                            const sheetOptionsEl = document.getElementById('contactChoiceSheetOptions');
+                            const optionsEl = document.getElementById('contactChoiceOptions');
+                            const submitBtn = document.getElementById('contactChoiceSubmit');
+                            const cancelBtn = document.getElementById('contactChoiceCancel');
+                            cancelBtn.onclick = () => {
+                                modal.style.display = 'none';
+                                fetch(`/api/resolve-contact/${jobId}`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ cancelled: true }),
+                                }).catch(() => {});
+                            };
+
+                            let selectedOccurrenceIndex = null;
+                            let selectedPair = null;
+
+                            function updateSubmitState() {
+                                submitBtn.disabled = selectedOccurrenceIndex === null || selectedPair === null;
+                            }
+
+                            relayEl.textContent = `Relay "${job.conflict_relay}" has a repeated contact: ${job.conflict_code || '?'}`;
+
+                            sheetOptionsEl.innerHTML = '';
+                            occurrences.forEach((occ, i) => {
+                                const btn = document.createElement('button');
+                                btn.textContent = `${occ.circuit_type} — sheet ${occ.sheet_number}`;
+                                btn.style.cssText = 'width:100%; box-sizing:border-box; border:1px solid #334155; color:#cbd5e1; border-radius:4px; padding:8px 10px; font-size:0.85rem; background:transparent; cursor:pointer; font-family:inherit; text-align:left;';
+                                btn.onclick = () => {
+                                    selectedOccurrenceIndex = i;
+                                    [...sheetOptionsEl.children].forEach(c => c.style.borderColor = '#334155');
+                                    btn.style.borderColor = '#60a5fa';
+                                    updateSubmitState();
+                                };
+                                sheetOptionsEl.appendChild(btn);
+                            });
+
+                            optionsEl.innerHTML = '';
+                            options.forEach((opt) => {
+                                const btn = document.createElement('button');
+                                btn.textContent = opt;
+                                btn.style.cssText = 'width:100%; box-sizing:border-box; border:1px solid aliceblue; color:azure; border-radius:4px; padding:10px 12px; font-size:0.9rem; background:transparent; cursor:pointer; font-family:inherit;';
+                                btn.onclick = () => {
+                                    selectedPair = opt;
+                                    [...optionsEl.children].forEach(c => c.style.borderColor = 'aliceblue');
+                                    btn.style.borderColor = '#4ade80';
+                                    updateSubmitState();
+                                };
+                                optionsEl.appendChild(btn);
+                            });
+
+                            submitBtn.disabled = true;
+                            submitBtn.onclick = () => {
+                                modal.style.display = 'none';
+                                fetch(`/api/resolve-contact/${jobId}`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        chosen_contact_pair: selectedPair,
+                                        chosen_occurrence_index: selectedOccurrenceIndex,
+                                    }),
+                                }).catch(() => {});
+                            };
+
+                            modal.style.display = 'flex';
+                        }
+                        return; // don't re-render every poll tick while awaiting the SAME answer
+                    }
+
+                    if (job.state === 'done') {
+                        clearInterval(timer);
+                        setText(`Done — downloading…`);
+                        window.location.href = `/api/download/${jobId}`;
+                        setTimeout(reset, 1500);
+                    }
+
+                    if (job.state === 'cancelled') {
+                        clearInterval(timer);
+                        alert(`Generation cancelled: ${job.error}`);
+                        reset();
+                    }
+
+                    if (job.state === 'error') {
+                        clearInterval(timer);
+                        if (job.log_errors) {
+                            const wantsLog = confirm(
+                                `Generation stopped:\n\n${job.error}\n\nDownload the error log now?`
+                            );
+                            if (wantsLog) {
+                                window.location.href = `/api/download-log/${jobId}`;
+                            }
+                        } else {
+                            alert(`Generation failed: ${job.error}`);
+                        }
+                        reset();
+                    }
+
+                    if (job.state === 'cancelled') {
+                        clearInterval(timer);
+                        const wantsLog = confirm(
+                            `Generation cancelled.\n\nDownload the generation log up to this point?`
+                        );
+                        if (wantsLog) {
+                            window.location.href = `/api/download-log/${jobId}`;
+                        }
+                        reset();
+                    }
+                } catch (err) {
+                    clearInterval(timer);
+                    alert(err.message);
+                    reset();
+                }
+            }, 1200);
+        }
+
+        wireGenerateButton('.btn-signal', '/api/upload', '⚡');
+        wireGenerateButton('.btn-track', '/api/upload-track', '🛤');
+        wireGenerateButton('.btn-azr', '/api/upload-ar-azr', '🔁');
+        wireGenerateButton('.btn-relayrack', '/api/upload-relay-rack', '🗄️');
+        wireGenerateButton('.btn-communication', '/api/upload-communication', '📡');
+        wireGenerateButton('.btn-sdf', '/api/upload-sdf', '⏱️');
+        wireGenerateButton('.btn-datalogger', '/api/upload-datalogger', '📊');
+
+        (function wireIfcButton() {
+            const btn = document.querySelector('.btn-ifc');
+            const icon = '📦';
+            const defaultHTML = btn.innerHTML;
+
+            function setText(text) {
+                btn.innerHTML = `<span class="btn-icon">${icon}</span>${text}`;
+            }
+            function reset() {
+                btn.innerHTML = defaultHTML;
+                btn.disabled = false;
+            }
+
+            btn.addEventListener('click', async () => {
+                if (!excelInput.files.length) {
+                    alert('Please upload the Excel workbook first.');
+                    return;
+                }
+                if (!templateInput.files.length) {
+                    alert('Please upload a border/title-block template first.');
+                    return;
+                }
+
+                btn.disabled = true;
+                setText('Starting…');
+
+                const formData = new FormData();
+                formData.append('file', excelInput.files[0]);
+                formData.append('template', templateInput.files[0]);
+                // Custom Typicals is OPTIONAL for the full IFC run - Custom
+                // Circuits just gets skipped if it's not provided.
+                if (customTypicalsInput.files.length && customTypicalsInput.files[0].name.toLowerCase().endsWith('.zip')) {
+                    formData.append('circuits_zip', customTypicalsInput.files[0]);
+                }
+                formData.append('filename_pattern', patternInput.value || '');
+                formData.append('hut_name', hutNameInput.value || '');
+                formData.append('section', sectionInput.value || '');
+                formData.append('relay_position', relayPositionInput.checked ? '1' : '0');
+                const checkedScriptType = document.querySelector('input[name="script_type"]:checked');
+                formData.append('script_type', checkedScriptType ? checkedScriptType.value : '');
+
+                try {
+                    const res = await fetch('/api/upload-ifc', { method: 'POST', body: formData });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Upload failed');
+                    pollStatus(data.job_id, setText, reset);
+                } catch (err) {
+                    alert(err.message);
+                    reset();
+                }
+            });
+        })();
+
+        (function wireCustomCircuitsButton() {
+            const btn = document.querySelector('.btn-custom');
+            const icon = '⚙️';
+            const defaultHTML = btn.innerHTML;
+
+            function setText(text) {
+                btn.innerHTML = `<span class="btn-icon">${icon}</span>${text}`;
+            }
+            function reset() {
+                btn.innerHTML = defaultHTML;
+                btn.disabled = false;
+            }
+
+            btn.addEventListener('click', async () => {
+                if (!excelInput.files.length) {
+                    alert('Please upload the Excel workbook first.');
+                    return;
+                }
+                if (!templateInput.files.length) {
+                    alert('Please upload a border/title-block template first.');
+                    return;
+                }
+                if (!customTypicalsInput.files.length) {
+                    alert('Please upload the Custom Typicals zip first.');
+                    return;
+                }
+                if (!customTypicalsInput.files[0].name.toLowerCase().endsWith('.zip')) {
+                    alert('Custom Typicals must be a .zip file (.rar is not supported yet).');
+                    return;
+                }
+
+                btn.disabled = true;
+                setText('Starting…');
+
+                const formData = new FormData();
+                formData.append('file', excelInput.files[0]);
+                formData.append('template', templateInput.files[0]);
+                formData.append('circuits_zip', customTypicalsInput.files[0]);
+                formData.append('filename_pattern', patternInput.value || '');
+                formData.append('hut_name', hutNameInput.value || '');
+                formData.append('section', sectionInput.value || '');
+                formData.append('relay_position', relayPositionInput.checked ? '1' : '0');
+                const checkedScriptType = document.querySelector('input[name="script_type"]:checked');
+                formData.append('script_type', checkedScriptType ? checkedScriptType.value : '');
+
+                try {
+                    const res = await fetch('/api/upload-custom-circuits', { method: 'POST', body: formData });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Upload failed');
+                    pollStatus(data.job_id, setText, reset);
+                } catch (err) {
+                    alert(err.message);
+                    reset();
+                }
+            });
+        })();
+    </script>
+    <div id="contactChoiceModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); align-items:center; justify-content:center; z-index:1000; font-family:Verdana,Geneva,Tahoma,sans-serif;">
+        <div style="background-color:#0f172a; border-radius:1.2em; padding:1.5rem; width:min(30em,90%); box-sizing:border-box; color:aliceblue; max-height:85vh; overflow-y:auto;">
+            <h3 style="margin:0 0 0.6rem 0; font-size:1.05rem;">Repeated Contact Found</h3>
+            <p id="contactChoiceRelay" style="margin:0 0 1rem 0; font-size:0.9rem;"></p>
+
+            <p style="margin:0 0 0.5rem 0; font-size:0.85rem; color:#cbd5e1;">1. Which sheet should be updated?</p>
+            <div id="contactChoiceSheetOptions" style="display:flex; flex-direction:column; gap:0.4rem; margin-bottom:1rem;"></div>
+
+            <p style="margin:0 0 0.5rem 0; font-size:0.85rem; color:#cbd5e1;">2. Pick a free alternative pair for it:</p>
+            <div id="contactChoiceOptions" style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem;"></div>
+
+            <button id="contactChoiceSubmit" style="width:100%; box-sizing:border-box; border:1px solid #4ade80; color:#4ade80; border-radius:4px; padding:10px 12px; font-size:0.9rem; background:transparent; cursor:pointer; font-family:inherit; margin-bottom:0.5rem;" disabled>Apply</button>
+            <button id="contactChoiceCancel" style="width:100%; box-sizing:border-box; border:1px solid #f87171; color:#f87171; border-radius:4px; padding:10px 12px; font-size:0.9rem; background:transparent; cursor:pointer; font-family:inherit;">Cancel &amp; Stop Generation</button>
+        </div>
+    </div>
+</body>
+
+</html>

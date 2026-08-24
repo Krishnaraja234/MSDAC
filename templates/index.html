@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSDAC — Signal Circuit Generator</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Verdana, Geneva, Tahoma, sans-serif;
+            color: aliceblue;
+            background-color: #1a1a2e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: min(30em, 100%);
+            background: linear-gradient(135deg, #0f172a, #1e3a5f);
+            border-radius: 2em;
+            padding: clamp(1.5rem, 5vw, 2rem);
+            box-sizing: border-box;
+        }
+
+        h3 {
+            margin: 0 0 0.4rem 0;
+            color: aliceblue;
+            text-align: center;
+            font-size: clamp(1rem, 3vw, 1.2rem);
+        }
+
+        p.subtitle {
+            margin: 0 0 1.5rem 0;
+            color: #94a3b8;
+            text-align: center;
+            font-size: clamp(0.75rem, 2.5vw, 0.85rem);
+        }
+
+        .dropzone {
+            width: 100%;
+            box-sizing: border-box;
+            border: 2px dashed #334155;
+            border-radius: 12px;
+            background-color: #1e293b;
+            padding: clamp(1.5rem, 5vw, 2.2rem) 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background-color 0.15s ease;
+        }
+
+        .dropzone.dragover {
+            border-color: #60a5fa;
+            background-color: #24314d;
+        }
+
+        .dropzone .icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .dropzone .label {
+            font-size: clamp(0.8rem, 2.5vw, 0.95rem);
+            color: aliceblue;
+        }
+
+        .dropzone .hint {
+            font-size: clamp(0.7rem, 2vw, 0.78rem);
+            color: #64748b;
+            margin-top: 0.4rem;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .filename {
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 0.8rem;
+            padding: 0.6rem 0.9rem;
+            border-radius: 8px;
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            font-size: clamp(0.75rem, 2.3vw, 0.85rem);
+            color: #cbd5e1;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+
+        .filename.visible {
+            display: flex;
+        }
+
+        .filename .remove {
+            cursor: pointer;
+            color: #f87171;
+            font-weight: bold;
+        }
+
+        button.generate {
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 1.2rem;
+            border: 1px solid aliceblue;
+            color: azure;
+            border-radius: 4px;
+            padding: 10px 12px;
+            font-size: clamp(0.8rem, 2.5vw, 0.9rem);
+            background: transparent;
+            cursor: pointer;
+            font-family: Verdana, Geneva, Tahoma, sans-serif;
+            transition: background-color 0.15s ease;
+        }
+
+        button.generate:hover:not(:disabled) {
+            background-color: rgba(95, 68, 45, 0.9);
+        }
+
+        button.generate:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .progress-wrap {
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 1.4rem;
+            display: none;
+        }
+
+        .progress-wrap.visible {
+            display: block;
+        }
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: clamp(0.72rem, 2.2vw, 0.82rem);
+            color: #94a3b8;
+            margin-bottom: 0.4rem;
+        }
+
+        .progress-track {
+            width: 100%;
+            height: 10px;
+            border-radius: 6px;
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background-color: #60a5fa;
+            border-radius: 6px;
+            transition: width 0.4s ease;
+        }
+
+        .progress-fill.error {
+            background-color: #f87171;
+        }
+
+        .progress-fill.done {
+            background-color: #4ade80;
+        }
+
+        .status-msg {
+            margin-top: 0.6rem;
+            font-size: clamp(0.72rem, 2.2vw, 0.82rem);
+            color: #cbd5e1;
+            text-align: center;
+        }
+
+        .status-msg.error {
+            color: #f87171;
+        }
+
+        a.download-link {
+            display: none;
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 1rem;
+            text-align: center;
+            text-decoration: none;
+            border: 1px solid #4ade80;
+            color: #4ade80;
+            border-radius: 4px;
+            padding: 10px 12px;
+            font-size: clamp(0.8rem, 2.5vw, 0.9rem);
+            font-family: Verdana, Geneva, Tahoma, sans-serif;
+        }
+
+        a.download-link.visible {
+            display: block;
+        }
+
+        a.download-link:hover {
+            background-color: rgba(74, 222, 128, 0.12);
+        }
+
+        .field {
+            width: 100%;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 1rem;
+        }
+
+        .field label {
+            color: aliceblue;
+            font-size: clamp(0.75rem, 2.5vw, 0.9rem);
+        }
+
+        .field input[type="file"] {
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: clamp(0.75rem, 2.5vw, 0.85rem);
+            border: 1px solid #334155;
+            background-color: #1e293b;
+            color: aliceblue;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .field input[type="file"]:focus {
+            border-color: #60a5fa;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h3>SIGNAL CIRCUIT GENERATOR</h3>
+        <p class="subtitle">Upload the SIGNAL sheet workbook to generate DWG circuit drawings</p>
+
+        <div class="dropzone" id="dropzone">
+            <span class="icon">📁</span>
+            <div class="label">Drag &amp; drop Excel file here, or click to browse</div>
+            <div class="hint">.xlsx or .xlsm — must contain a SIGNAL sheet</div>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xlsm">
+
+        <div class="filename" id="filenameBox">
+            <span id="filenameText"></span>
+            <span class="remove" id="removeFile">✕</span>
+        </div>
+
+        <div class="field">
+            <label for="templateInput">Border / Title-Block Template</label>
+            <input type="file" id="templateInput" accept=".dxf,.dwg">
+        </div>
+
+        <button class="generate" id="generateBtn" disabled>Generate Circuits</button>
+
+        <div class="progress-wrap" id="progressWrap">
+            <div class="progress-label">
+                <span id="progressStage">Working…</span>
+                <span id="progressPct">0%</span>
+            </div>
+            <div class="progress-track">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="status-msg" id="statusMsg"></div>
+        </div>
+
+        <a class="download-link" id="downloadLink">⬇ Download DWG Circuits (.zip)</a>
+    </div>
+
+    <script>
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        const filenameBox = document.getElementById('filenameBox');
+        const filenameText = document.getElementById('filenameText');
+        const removeFile = document.getElementById('removeFile');
+        const templateInput = document.getElementById('templateInput');
+        const generateBtn = document.getElementById('generateBtn');
+        const progressWrap = document.getElementById('progressWrap');
+        const progressStage = document.getElementById('progressStage');
+        const progressPct = document.getElementById('progressPct');
+        const progressFill = document.getElementById('progressFill');
+        const statusMsg = document.getElementById('statusMsg');
+        const downloadLink = document.getElementById('downloadLink');
+
+        let selectedFile = null;
+        let pollTimer = null;
+
+        const STAGE_LABELS = {
+            queued: 'Queued…',
+            preparing_template: 'Preparing title-block template…',
+            reading_excel: 'Reading Excel data…',
+            generating_dxf: 'Generating DXF sheets…',
+            converting_dwg: 'Converting to DWG…',
+            zipping: 'Packaging download…',
+            done: 'Done',
+            error: 'Error'
+        };
+
+        function resetUI() {
+            selectedFile = null;
+            filenameBox.classList.remove('visible');
+            generateBtn.disabled = true;
+            progressWrap.classList.remove('visible');
+            progressFill.style.width = '0%';
+            progressFill.classList.remove('error', 'done');
+            statusMsg.textContent = '';
+            statusMsg.classList.remove('error');
+            downloadLink.classList.remove('visible');
+            downloadLink.removeAttribute('href');
+            if (pollTimer) clearInterval(pollTimer);
+        }
+
+        function resetTemplateAlso() {
+            templateInput.value = '';
+        }
+
+        function updateGenerateEnabled() {
+            generateBtn.disabled = !(selectedFile && templateInput.files.length > 0);
+        }
+
+        function selectFile(file) {
+            if (!file) return;
+            const nameLower = file.name.toLowerCase();
+            if (!nameLower.endsWith('.xlsx') && !nameLower.endsWith('.xlsm')) {
+                alert('Please select an .xlsx or .xlsm file');
+                return;
+            }
+            selectedFile = file;
+            filenameText.textContent = file.name;
+            filenameBox.classList.add('visible');
+            updateGenerateEnabled();
+        }
+
+        dropzone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => selectFile(e.target.files[0]));
+        templateInput.addEventListener('change', updateGenerateEnabled);
+
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            selectFile(e.dataTransfer.files[0]);
+        });
+
+        removeFile.addEventListener('click', (e) => {
+            e.stopPropagation();
+            resetUI();
+            fileInput.value = '';
+        });
+
+        generateBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            generateBtn.disabled = true;
+            progressWrap.classList.add('visible');
+            progressFill.classList.remove('error', 'done');
+            statusMsg.classList.remove('error');
+            statusMsg.textContent = '';
+            downloadLink.classList.remove('visible');
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('template', templateInput.files[0]);
+
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.error || 'Upload failed');
+                }
+                pollStatus(data.job_id);
+            } catch (err) {
+                progressFill.classList.add('error');
+                statusMsg.classList.add('error');
+                statusMsg.textContent = err.message;
+                generateBtn.disabled = false;
+            }
+        });
+
+        function pollStatus(jobId) {
+            pollTimer = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/status/${jobId}`);
+                    const job = await res.json();
+                    if (!res.ok) throw new Error(job.error || 'Status check failed');
+
+                    const pct = job.progress ?? 0;
+                    progressFill.style.width = pct + '%';
+                    progressPct.textContent = pct + '%';
+                    progressStage.textContent = STAGE_LABELS[job.state] || job.state;
+
+                    if (job.state === 'generating_dxf' && job.total_signals) {
+                        statusMsg.textContent = `Signal ${job.signals_done || 0} of ${job.total_signals}`;
+                    }
+
+                    if (job.state === 'done') {
+                        clearInterval(pollTimer);
+                        progressFill.classList.add('done');
+                        statusMsg.textContent = `${job.sheet_count} sheet(s) generated`;
+                        downloadLink.href = `/api/download/${jobId}`;
+                        downloadLink.classList.add('visible');
+                        generateBtn.disabled = false;
+                    }
+
+                    if (job.state === 'error') {
+                        clearInterval(pollTimer);
+                        progressFill.classList.add('error');
+                        statusMsg.classList.add('error');
+                        statusMsg.textContent = job.error || 'Generation failed';
+                        generateBtn.disabled = false;
+                    }
+                } catch (err) {
+                    clearInterval(pollTimer);
+                    progressFill.classList.add('error');
+                    statusMsg.classList.add('error');
+                    statusMsg.textContent = err.message;
+                    generateBtn.disabled = false;
+                }
+            }, 1200);
+        }
+    </script>
+</body>
+
+</html>

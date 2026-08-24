@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MSDAC Sign In</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --navy: #263353;
+    --navy2: #101a2e;
+    --red: #ff3b3b;
+    --amber: #ffb020;
+    --green: #2ee6a6;
+    --ink: #e8edf7;
+    --muted: #7d8aa8;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(255,59,59,0.02), transparent 40%),
+      radial-gradient(circle at 85% 15%, rgba(255,176,32,0.02), transparent 45%),
+      radial-gradient(circle at 50% 90%, rgba(46,230,166,0.02), transparent 45%),
+      var(--navy);
+    font-family: 'Space Grotesk', sans-serif;
+    color: var(--ink);
+    overflow: hidden;
+    position: relative;
+    padding: 1rem;
+  }
+
+  .track {
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0 38px,
+      rgba(125,138,168,0.08) 38px 40px
+    );
+    animation: drift 6s linear infinite;
+  }
+  @keyframes drift {
+    from { background-position: 0 0; }
+    to { background-position: 0 40px; }
+  }
+
+  .card {
+    position: relative;
+    z-index: 2;
+    width: min(380px, 100%);
+    background: linear-gradient(180deg, var(--navy2), #0c1526);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 18px;
+    padding: 38px 34px 30px;
+    box-shadow:
+      0 30px 60px -20px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(255,255,255,0.02);
+    box-sizing: border-box;
+  }
+
+  .signals {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 18px;
+  }
+  .lamp {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+  }
+  .lamp.red    { background: var(--red);   box-shadow: 0 0 14px 3px rgba(255,59,59,0.7); }
+  .lamp.amber  { background: var(--amber); box-shadow: 0 0 14px 3px rgba(255,176,32,0.7); animation: blink 1.6s ease-in-out infinite; }
+  .lamp.green  { background: var(--green); box-shadow: 0 0 14px 3px rgba(46,230,166,0.7); }
+  @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.25; } }
+
+  h1 {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    letter-spacing: 0.3px;
+  }
+  .sub {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 28px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.5px;
+  }
+
+  label {
+    display: block;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 6px;
+    font-weight: 500;
+  }
+
+  .field { margin-bottom: 18px; }
+
+  input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    color: var(--ink);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+  }
+  input::placeholder { color: #4d5a78; }
+
+  .field.userid input:focus { border-color: var(--red);   box-shadow: 0 0 0 3px rgba(255,59,59,0.15); }
+  .field.pass input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(46,230,166,0.15); }
+
+  .error-msg {
+    color: var(--red);
+    text-align: center;
+    font-size: 13px;
+    margin: 0 0 1rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .show-hide-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #e2e8f0;
+    border: none;
+    border-radius: 4px;
+    color: #000000;
+    font-size: 0.7rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 4px 8px;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  .row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+  .row a { color: var(--amber); text-decoration: none; }
+  .row a:hover { text-decoration: underline; }
+
+  button[type="submit"] {
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.3px;
+    color: #0b1220;
+    background: linear-gradient(90deg, var(--red), var(--amber), var(--green));
+    background-size: 200% 100%;
+    cursor: pointer;
+    transition: background-position 0.4s, transform 0.15s;
+  }
+  button[type="submit"]:hover { background-position: 100% 0; transform: translateY(-1px); }
+  button[type="submit"]:active { transform: translateY(0); }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 11px;
+    margin: 22px 0 18px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(255,255,255,0.08);
+  }
+
+  .footer {
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 0;
+  }
+  .footer a { color: var(--green); text-decoration: none; font-weight: 500; }
+  .footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="track"></div>
+  <div class="card">
+    <div class="signals">
+      <span class="lamp red"></span>
+      <span class="lamp amber"></span>
+      <span class="lamp green"></span>
+    </div>
+    <h1>Sign In</h1>
+    <p class="sub">CLEAR TO PROCEED &mdash; ENTER CREDENTIALS</p>
+
+    {% if error %}
+    <p class="error-msg">{{ error }}</p>
+    {% endif %}
+
+    <form action="/login" method="post">
+      <div class="field userid">
+        <label for="userid">User ID</label>
+        <input type="text" name="userid" id="userid" required placeholder="User ID">
+      </div>
+      <div class="field pass">
+        <label for="password">Password</label>
+        <div style="position:relative;">
+          <input type="password" name="password" id="password" required placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" style="padding-right:3.4rem;">
+          <button type="button" class="show-hide-btn" onclick="var p=document.getElementById('password'); var isPwd=p.type==='password'; p.type=isPwd?'text':'password'; this.textContent=isPwd?'Hide':'Show';">Show</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <a href="/forgot-password">Forgot password?</a>
+      </div>
+
+      <button type="submit">Enter &rarr;</button>
+    </form>
+
+    <div class="divider">OR</div>
+
+    <p class="footer">New here? <a href="/signup">Create an account</a></p>
+  </div>
+</body>
+</html>
