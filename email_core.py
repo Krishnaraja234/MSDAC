@@ -1,91 +1,95 @@
 """
 Email sending for signup verification codes.
-CONFIRMED: uses a Gmail or Outlook account with an app password (NOT the
-regular account password - Gmail/Outlook require a separate "app
-password" for SMTP access when 2FA is enabled, which it should be).
-Configuration is via environment variables, so the actual credentials
-never need to be hardcoded into this file or committed anywhere:
-    MSDAC_SMTP_EMAIL     - the sending email address (required)
-    MSDAC_SMTP_PASSWORD  - the app password for that account (required)
-    MSDAC_SMTP_HOST      - defaults to Gmail's smtp.gmail.com if unset
-    MSDAC_SMTP_PORT      - defaults to 587 (STARTTLS) if unset
-For Gmail: Google Account -> Security -> 2-Step Verification -> App
-passwords -> generate one for "Mail". Use that 16-character password
-here, not your normal Gmail password.
-For Outlook: similar - Microsoft Account -> Security -> Advanced
-security options -> App passwords. Host is smtp.office365.com.
+Uses Brevo (https://brevo.com) over its HTTPS API instead of SMTP.
+Render's free tier blocks outbound traffic on SMTP ports 25/465/587,
+so raw smtplib (even to Gmail/Outlook) will hang and time out there.
+Brevo sends over normal HTTPS (port 443), which isn't blocked.
 
-NOTE: Render's free tier has no outbound IPv6 route, but smtp.gmail.com
-resolves to an IPv6 address by default. That mismatch causes
-"[Errno 101] Network is unreachable" even with correct credentials.
-_get_ipv4_smtp() below resolves the host to an IPv4 address explicitly
-and connects to that, sidestepping the issue without touching global
-socket behavior (so it won't affect any other part of the app).
+Unlike Resend, Brevo lets you verify a single sender EMAIL ADDRESS
+(no domain ownership required) - so an existing Gmail address works
+fine as the sender.
+
+Configuration is via environment variables, so the actual API key
+never needs to be hardcoded into this file or committed anywhere:
+    BREVO_API_KEY     - your Brevo API key (required)
+    BREVO_FROM_EMAIL  - the verified sender address (required)
+                         must be verified in Brevo dashboard first
+                         (Settings -> Senders, Domains & Dedicated IPs
+                         -> Senders -> Add a Sender -> confirm the
+                         link Brevo emails to that address)
+    BREVO_FROM_NAME   - display name shown to recipients (optional,
+                         defaults to "MSDAC Tool")
+
+Setup:
+    1. Sign up at https://brevo.com (free tier: 300 emails/day)
+    2. Settings -> Senders, Domains & Dedicated IPs -> Senders tab
+       -> Add a Sender -> enter your email address + display name
+    3. Click the confirmation link Brevo emails to that address
+    4. Settings -> SMTP & API -> API Keys tab -> Generate a New API Key
+    5. Set BREVO_API_KEY and BREVO_FROM_EMAIL as env vars on Render
 """
 import os
-import socket
-import smtplib
-from email.mime.text import MIMEText
+import requests
 
-SMTP_EMAIL = os.environ.get("MSDAC_SMTP_EMAIL")
-SMTP_PASSWORD = os.environ.get("MSDAC_SMTP_PASSWORD")
-SMTP_HOST = os.environ.get("MSDAC_SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.environ.get("MSDAC_SMTP_PORT", "587"))
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
+BREVO_FROM_EMAIL = os.environ.get("BREVO_FROM_EMAIL")
+BREVO_FROM_NAME = os.environ.get("BREVO_FROM_NAME", "MSDAC Tool")
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 class EmailNotConfigured(Exception):
     pass
 
 
-def _get_ipv4_smtp(host: str, port: int, timeout: int = 15) -> smtplib.SMTP:
-    """
-    Connects to an SMTP server over IPv4 explicitly.
-
-    Render's free-tier network has no outbound IPv6 route, and
-    smtp.gmail.com (and some other providers) resolve to an IPv6
-    address by default, which produces "[Errno 101] Network is
-    unreachable" even when credentials are correct. Resolving to an
-    IPv4 address first and connecting to that avoids the issue.
-
-    EHLO is sent with the original hostname (not the raw IP), since
-    some mail servers care about the HELO/EHLO name matching a real
-    hostname rather than an IP literal.
-    """
-    addr_info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
-    ipv4_addr = addr_info[0][4][0]
-    server = smtplib.SMTP(timeout=timeout)
-    server.connect(ipv4_addr, port)
-    server.ehlo(host)
-    return server
+class EmailSendError(Exception):
+    """Raised when Brevo's API rejects or fails to send the email."""
+    pass
 
 
 def send_verification_code(to_email: str, code: str, username: str = ""):
     """
     Sends the 6-digit verification code to the given email address.
-    Raises EmailNotConfigured if MSDAC_SMTP_EMAIL/MSDAC_SMTP_PASSWORD
-    aren't set, or smtplib.SMTPException (or similar) on any actual
-    send failure - both are meant to be caught by the caller and shown
-    as a clear error rather than crashing the signup request.
+
+    Raises EmailNotConfigured if BREVO_API_KEY/BREVO_FROM_EMAIL
+    aren't set, or EmailSendError on any actual send failure (bad
+    API key, unverified sender, rate limit, etc) - both are meant to
+    be caught by the caller and shown as a clear error rather than
+    crashing the signup request.
     """
-    if not SMTP_EMAIL or not SMTP_PASSWORD:
+    if not BREVO_API_KEY or not BREVO_FROM_EMAIL:
         raise EmailNotConfigured(
-            "Email sending isn't configured yet - set the MSDAC_SMTP_EMAIL "
-            "and MSDAC_SMTP_PASSWORD environment variables (see email_core.py for setup instructions)."
+            "Email sending isn't configured yet - set the BREVO_API_KEY "
+            "and BREVO_FROM_EMAIL environment variables (see email_core.py for setup instructions)."
         )
 
     subject = "MSDAC Tool - Your Verification Code"
-    body = (
+    text_body = (
         f"Hello{' ' + username if username else ''},\n\n"
         f"Your MSDAC tool signup verification code is: {code}\n\n"
         "Enter this code on the verification page to complete your signup.\n"
         "If you didn't request this, you can ignore this email.\n"
     )
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = SMTP_EMAIL
-    msg["To"] = to_email
 
-    with _get_ipv4_smtp(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
-        server.login(SMTP_EMAIL, SMTP_PASSWORD)
-        server.sendmail(SMTP_EMAIL, [to_email], msg.as_string())
+    try:
+        response = requests.post(
+            BREVO_API_URL,
+            headers={
+                "api-key": BREVO_API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json={
+                "sender": {"name": BREVO_FROM_NAME, "email": BREVO_FROM_EMAIL},
+                "to": [{"email": to_email}],
+                "subject": subject,
+                "textContent": text_body,
+            },
+            timeout=15,
+        )
+    except requests.RequestException as e:
+        raise EmailSendError(f"Could not reach Brevo API: {e}") from e
+
+    if response.status_code >= 400:
+        raise EmailSendError(
+            f"Brevo API returned {response.status_code}: {response.text}"
+        )
