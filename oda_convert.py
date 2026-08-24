@@ -23,7 +23,7 @@ import sys
 # can be copied/moved anywhere and this still finds
 # "ODAFileConverter 25.12.0/ODAFileConverter.exe" sitting right next to it.
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
-ODA_EXE_PATH = os.path.join(_APP_DIR, "ODAFileConverter 25.12.0", "ODAFileConverter.exe")
+ODA_EXE_PATH = os.path.join(_APP_DIR, "ODAFileConverter", "ODAFileConverter_QT6_lnxX64_8.3dll_27.1.AppImage")
 # --------------------------------------------------------------
 
 # ODA File Converter CLI signature:
