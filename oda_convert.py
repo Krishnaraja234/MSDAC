@@ -1,124 +1,187 @@
-```python
 """
-Wrapper around ODA File Converter for DXF -> DWG conversion.
+Wrapper around ODA File Converter for DXF <-> DWG conversion.
 
-The ODA AppImage is extracted into:
+The ODA File Converter AppImage is extracted beforehand:
 
     ODAFileConverter/
         squashfs-root/
             AppRun
+            libTD_Db.so
             ...
+            
+We execute the extracted AppRun directly instead of executing the
+original .AppImage. This avoids the FUSE requirement on Render.
 
-We execute AppRun directly instead of executing the AppImage. This avoids
-the FUSE requirement on Render/Linux.
+ODA File Converter is invoked PER FOLDER:
+    ODAFileConverter <input_folder> <output_folder>
+                      <output_version> <output_type>
+                      <recurse> <audit>
 
-Important:
-- AppRun must be executed with squashfs-root as the working directory.
-- ODA's internal library directories are added to LD_LIBRARY_PATH.
-- Each conversion uses its own input/output folders.
+Each generation job has its own input/output folders, so concurrent
+jobs do not share conversion files.
 """
 
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 
 
-# ----------------------------------------------------------------------
-# ODA CONFIGURATION
-# ----------------------------------------------------------------------
+# ==============================================================
+# ODA FILE CONVERTER CONFIGURATION
+# ==============================================================
 
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
-ODA_ROOT = os.path.join(
+ODA_ROOT_DIR = os.path.join(
     _APP_DIR,
     "ODAFileConverter",
     "squashfs-root",
 )
 
 ODA_EXE_PATH = os.path.join(
-    ODA_ROOT,
+    ODA_ROOT_DIR,
     "AppRun",
 )
 
-# ----------------------------------------------------------------------
-
+# ODA output settings
 ODA_OUTPUT_VERSION = "ACAD2013"
 ODA_RECURSE = "0"
 ODA_AUDIT = "1"
 
 
+# ==============================================================
+# ERROR TYPE
+# ==============================================================
+
 class OdaConversionError(RuntimeError):
+    """Raised when ODA File Converter fails."""
+
     pass
 
 
-def _build_oda_environment() -> dict:
-    """
-    Build an environment suitable for running the extracted ODA AppImage.
+# ==============================================================
+# ENVIRONMENT SETUP
+# ==============================================================
 
-    The important part is LD_LIBRARY_PATH. ODA contains private shared
-    libraries inside squashfs-root which are not installed system-wide.
+def _build_oda_environment():
+    """
+    Build the environment used to launch the extracted ODA AppImage.
+
+    Render does not provide FUSE, so we run the extracted AppRun
+    directly.
+
+    LD_LIBRARY_PATH is configured so that libraries such as:
+
+        libTD_Db.so
+
+    can be found by the ODA executable.
     """
 
     env = os.environ.copy()
 
-    library_dirs = []
+    if sys.platform == "win32":
+        return env
 
-    # Common library locations inside an extracted AppImage.
-    possible_dirs = [
-        ODA_ROOT,
-        os.path.join(ODA_ROOT, "lib"),
-        os.path.join(ODA_ROOT, "lib64"),
-        os.path.join(ODA_ROOT, "usr"),
-        os.path.join(ODA_ROOT, "usr", "lib"),
-        os.path.join(ODA_ROOT, "usr", "lib64"),
-        os.path.join(ODA_ROOT, "usr", "lib", "x86_64-linux-gnu"),
+    library_directories = [
+        ODA_ROOT_DIR,
+
+        os.path.join(
+            ODA_ROOT_DIR,
+            "usr",
+            "lib",
+        ),
+
+        os.path.join(
+            ODA_ROOT_DIR,
+            "usr",
+            "lib64",
+        ),
+
+        os.path.join(
+            ODA_ROOT_DIR,
+            "lib",
+        ),
+
+        os.path.join(
+            ODA_ROOT_DIR,
+            "lib64",
+        ),
+
+        os.path.join(
+            ODA_ROOT_DIR,
+            "usr",
+            "lib",
+            "x86_64-linux-gnu",
+        ),
     ]
 
-    for directory in possible_dirs:
-        if os.path.isdir(directory):
-            library_dirs.append(directory)
+    # Keep only directories that actually exist.
+    existing_directories = [
+        path
+        for path in library_directories
+        if os.path.isdir(path)
+    ]
 
-    # Also search the extracted ODA tree for directories containing
-    # important shared libraries such as libTD_Db.so.
-    #
-    # This makes the code robust if ODA stores its libraries in a
-    # version-specific directory.
-    for root, dirs, files in os.walk(ODA_ROOT):
-        for filename in files:
-            if filename.startswith("libTD_") and filename.endswith(".so"):
-                if root not in library_dirs:
-                    library_dirs.append(root)
-                break
-
-    # Preserve an existing LD_LIBRARY_PATH if Render/Linux already
-    # provides one.
-    existing_ld_library_path = env.get("LD_LIBRARY_PATH", "")
+    # Preserve any existing Render LD_LIBRARY_PATH.
+    existing_ld_library_path = env.get(
+        "LD_LIBRARY_PATH",
+        "",
+    )
 
     if existing_ld_library_path:
-        library_dirs.append(existing_ld_library_path)
+        existing_directories.append(
+            existing_ld_library_path
+        )
 
-    env["LD_LIBRARY_PATH"] = ":".join(library_dirs)
+    if existing_directories:
+        env["LD_LIBRARY_PATH"] = ":".join(
+            existing_directories
+        )
 
-    # Some Qt-based AppImages expect their Qt plugins to be available
-    # relative to the extracted application.
-    qt_plugin_candidates = [
-        os.path.join(ODA_ROOT, "plugins"),
-        os.path.join(ODA_ROOT, "usr", "plugins"),
-        os.path.join(ODA_ROOT, "usr", "lib", "qt", "plugins"),
-    ]
+    # AppImage-compatible environment variable.
+    env["APPDIR"] = ODA_ROOT_DIR
 
-    qt_plugin_dirs = [
-        directory
-        for directory in qt_plugin_candidates
-        if os.path.isdir(directory)
-    ]
-
-    if qt_plugin_dirs:
-        env["QT_PLUGIN_PATH"] = ":".join(qt_plugin_dirs)
+    # Render is headless.
+    # Prevent Qt from trying to connect to a graphical display.
+    env.setdefault(
+        "QT_QPA_PLATFORM",
+        "offscreen",
+    )
 
     return env
 
+
+# ==============================================================
+# VALIDATE ODA INSTALLATION
+# ==============================================================
+
+def _validate_oda_installation():
+    """
+    Verify that the extracted ODA File Converter exists.
+    """
+
+    if not os.path.isdir(ODA_ROOT_DIR):
+        raise OdaConversionError(
+            "ODA File Converter extracted directory was not found.\n"
+            f"Expected directory:\n{ODA_ROOT_DIR}\n\n"
+            "Expected structure:\n"
+            "ODAFileConverter/squashfs-root/AppRun"
+        )
+
+    if not os.path.isfile(ODA_EXE_PATH):
+        raise OdaConversionError(
+            "ODA File Converter AppRun was not found.\n"
+            f"Expected file:\n{ODA_EXE_PATH}\n\n"
+            "Expected structure:\n"
+            "ODAFileConverter/squashfs-root/AppRun"
+        )
+
+
+# ==============================================================
+# RUN ODA
+# ==============================================================
 
 def _run_oda(
     input_folder: str,
@@ -126,60 +189,68 @@ def _run_oda(
     out_type: str,
     timeout: int,
 ) -> None:
+    """
+    Run ODA File Converter on a complete input folder.
 
-    # --------------------------------------------------------------
-    # Check extracted ODA installation
-    # --------------------------------------------------------------
+    Parameters
+    ----------
+    input_folder:
+        Folder containing DXF/DWG files.
 
-    if not os.path.isfile(ODA_EXE_PATH):
+    output_folder:
+        Folder where converted files will be written.
+
+    out_type:
+        "DWG" or "DXF"
+
+    timeout:
+        Maximum execution time in seconds.
+    """
+
+    _validate_oda_installation()
+
+    if not os.path.isdir(input_folder):
         raise OdaConversionError(
-            f"ODA File Converter AppRun not found at:\n"
-            f"{ODA_EXE_PATH}\n\n"
-            "Expected structure:\n"
-            "ODAFileConverter/\n"
-            "    squashfs-root/\n"
-            "        AppRun"
+            f"ODA input folder does not exist:\n{input_folder}"
         )
 
-    if not os.access(ODA_EXE_PATH, os.X_OK):
-        raise OdaConversionError(
-            f"ODA AppRun exists but is not executable:\n"
-            f"{ODA_EXE_PATH}\n\n"
-            "On Linux/Render, AppRun must have execute permission."
-        )
+    os.makedirs(
+        output_folder,
+        exist_ok=True,
+    )
 
-    if not os.path.isdir(ODA_ROOT):
-        raise OdaConversionError(
-            f"ODA extracted directory not found:\n{ODA_ROOT}"
-        )
+    # ----------------------------------------------------------
+    # Linux executable permission
+    # ----------------------------------------------------------
+    #
+    # Git on Windows can sometimes fail to preserve Linux
+    # executable permissions.
+    #
+    # We therefore attempt to make AppRun executable when running
+    # on Linux/Render.
+    # ----------------------------------------------------------
 
-    # --------------------------------------------------------------
-    # Check for ODA's main private library
-    # --------------------------------------------------------------
+    if sys.platform != "win32":
+        try:
+            current_mode = os.stat(
+                ODA_EXE_PATH
+            ).st_mode
 
-    lib_td_db_found = False
+            os.chmod(
+                ODA_EXE_PATH,
+                current_mode | 0o111,
+            )
 
-    for root, dirs, files in os.walk(ODA_ROOT):
-        if "libTD_Db.so" in files:
-            lib_td_db_found = True
-            break
+        except OSError as exc:
+            raise OdaConversionError(
+                "Unable to make ODA AppRun executable.\n"
+                f"Path: {ODA_EXE_PATH}\n"
+                f"Error: {exc}"
+            ) from exc
 
-    if not lib_td_db_found:
-        raise OdaConversionError(
-            "ODA extraction appears incomplete.\n"
-            "The required library 'libTD_Db.so' was not found inside:\n"
-            f"{ODA_ROOT}"
-        )
-
-    # --------------------------------------------------------------
-    # Prepare output folder
-    # --------------------------------------------------------------
-
-    os.makedirs(output_folder, exist_ok=True)
-
-    # --------------------------------------------------------------
-    # ODA command
-    # --------------------------------------------------------------
+    # ----------------------------------------------------------
+    # ODA command line
+    # ----------------------------------------------------------
 
     cmd = [
         ODA_EXE_PATH,
@@ -191,176 +262,262 @@ def _run_oda(
         ODA_AUDIT,
     ]
 
-    # --------------------------------------------------------------
-    # Environment
-    # --------------------------------------------------------------
-
-    env = _build_oda_environment()
-
-    # --------------------------------------------------------------
-    # Windows-specific process handling
-    # --------------------------------------------------------------
+    # ----------------------------------------------------------
+    # Windows process settings
+    # ----------------------------------------------------------
 
     creationflags = 0
     startupinfo = None
 
     if sys.platform == "win32":
+
         creationflags = subprocess.CREATE_NO_WINDOW
 
         startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = subprocess.SW_HIDE
 
-    # --------------------------------------------------------------
-    # Execute ODA
-    # --------------------------------------------------------------
+        startupinfo.dwFlags |= (
+            subprocess.STARTF_USESHOWWINDOW
+        )
+
+        startupinfo.wShowWindow = (
+            subprocess.SW_HIDE
+        )
+
+    # ----------------------------------------------------------
+    # Environment
+    # ----------------------------------------------------------
+
+    env = _build_oda_environment()
+
+    # ----------------------------------------------------------
+    # Run ODA
+    # ----------------------------------------------------------
 
     try:
+
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
-
-            # IMPORTANT:
-            # AppRun expects to run from the extracted AppImage root.
-            cwd=ODA_ROOT,
-
-            # IMPORTANT:
-            # Gives ODA access to libTD_Db.so and its other private
-            # shared libraries.
-            env=env,
-
             creationflags=creationflags,
             startupinfo=startupinfo,
+            env=env,
+            cwd=ODA_ROOT_DIR,
         )
 
     except subprocess.TimeoutExpired as exc:
+
         raise OdaConversionError(
-            f"ODA File Converter timed out after {timeout}s"
+            "ODA File Converter timed out after "
+            f"{timeout} seconds."
         ) from exc
 
-    except OSError as exc:
+    except PermissionError as exc:
+
         raise OdaConversionError(
-            f"Could not start ODA File Converter.\n"
-            f"Executable: {ODA_EXE_PATH}\n"
+            "Permission denied while starting ODA File Converter.\n"
+            f"Executable:\n{ODA_EXE_PATH}\n"
             f"Error: {exc}"
         ) from exc
 
-    # --------------------------------------------------------------
-    # Check process result
-    # --------------------------------------------------------------
+    except FileNotFoundError as exc:
+
+        raise OdaConversionError(
+            "ODA File Converter executable could not be started.\n"
+            f"Executable:\n{ODA_EXE_PATH}\n"
+            f"Error: {exc}"
+        ) from exc
+
+    except OSError as exc:
+
+        raise OdaConversionError(
+            "Operating system error while starting "
+            "ODA File Converter.\n"
+            f"Executable:\n{ODA_EXE_PATH}\n"
+            f"Error: {exc}"
+        ) from exc
+
+    # ----------------------------------------------------------
+    # Check return code
+    # ----------------------------------------------------------
 
     if result.returncode != 0:
+
         raise OdaConversionError(
-            f"ODA File Converter exited with code "
-            f"{result.returncode}.\n"
-            f"stdout:\n{result.stdout}\n"
+            "ODA File Converter exited with "
+            f"code {result.returncode}.\n\n"
+            f"Executable:\n{ODA_EXE_PATH}\n\n"
+            f"Input folder:\n{input_folder}\n\n"
+            f"Output folder:\n{output_folder}\n\n"
+            f"stdout:\n{result.stdout}\n\n"
             f"stderr:\n{result.stderr}"
         )
 
-    # --------------------------------------------------------------
-    # Check produced files
-    # --------------------------------------------------------------
+    # ----------------------------------------------------------
+    # Check output
+    # ----------------------------------------------------------
 
     ext = out_type.lower()
 
     produced = [
-        f
-        for f in os.listdir(output_folder)
-        if f.lower().endswith(f".{ext}")
+        filename
+        for filename in os.listdir(output_folder)
+        if filename.lower().endswith(
+            f".{ext}"
+        )
     ]
 
     if not produced:
+
         raise OdaConversionError(
-            f"ODA File Converter ran but produced no .{ext} files.\n"
-            f"stdout:\n{result.stdout}\n"
+            "ODA File Converter completed successfully "
+            "but produced no output files.\n\n"
+            f"Expected extension: .{ext}\n"
+            f"Output folder: {output_folder}\n\n"
+            f"stdout:\n{result.stdout}\n\n"
             f"stderr:\n{result.stderr}"
         )
 
+
+# ==============================================================
+# DXF -> DWG
+# ==============================================================
 
 def convert_folder_to_dwg(
     input_folder: str,
     output_folder: str,
     timeout: int = 120,
 ) -> None:
-    """Convert every DXF in input_folder to DWG."""
+    """
+    Convert every DXF file in input_folder to DWG.
+
+    Results are written into output_folder.
+    """
+
     _run_oda(
-        input_folder,
-        output_folder,
-        "DWG",
-        timeout,
+        input_folder=input_folder,
+        output_folder=output_folder,
+        out_type="DWG",
+        timeout=timeout,
     )
 
+
+# ==============================================================
+# DWG -> DXF
+# ==============================================================
 
 def convert_folder_to_dxf(
     input_folder: str,
     output_folder: str,
     timeout: int = 120,
 ) -> None:
-    """Convert every DWG in input_folder to DXF."""
+    """
+    Convert every DWG file in input_folder to DXF.
+
+    Results are written into output_folder.
+    """
+
     _run_oda(
-        input_folder,
-        output_folder,
-        "DXF",
-        timeout,
+        input_folder=input_folder,
+        output_folder=output_folder,
+        out_type="DXF",
+        timeout=timeout,
     )
 
+
+# ==============================================================
+# SINGLE DWG -> DXF
+# ==============================================================
 
 def convert_single_file_to_dxf(
     input_path: str,
     timeout: int = 60,
 ) -> str:
     """
-    Convert a single DWG file to DXF.
+    Convert one DWG file to DXF.
 
-    Uses isolated temporary input/output directories so multiple
-    simultaneous jobs do not interfere with each other.
+    A temporary isolated input/output directory is used so that
+    multiple users/jobs can perform conversions simultaneously.
+
+    Returns
+    -------
+    str
+        Path to the resulting converted DXF.
     """
 
-    import tempfile
+    if not os.path.isfile(input_path):
 
-    with tempfile.TemporaryDirectory() as tmp_in, \
-         tempfile.TemporaryDirectory() as tmp_out:
-
-        in_name = os.path.basename(input_path)
-
-        tmp_in_path = os.path.join(
-            tmp_in,
-            in_name,
+        raise OdaConversionError(
+            f"Input DWG file does not exist:\n{input_path}"
         )
 
-        shutil.copy(
-            input_path,
-            tmp_in_path,
-        )
+    with tempfile.TemporaryDirectory() as tmp_in:
 
-        convert_folder_to_dxf(
-            tmp_in,
-            tmp_out,
-            timeout=timeout,
-        )
+        with tempfile.TemporaryDirectory() as tmp_out:
 
-        produced = [
-            f
-            for f in os.listdir(tmp_out)
-            if f.lower().endswith(".dxf")
-        ]
+            # --------------------------------------------------
+            # Copy input DWG into isolated input folder
+            # --------------------------------------------------
 
-        if not produced:
-            raise OdaConversionError(
-                f"No DXF produced for {input_path}"
+            input_filename = os.path.basename(
+                input_path
             )
 
-        result_path = (
-            input_path.rsplit(".", 1)[0]
-            + "_converted.dxf"
-        )
+            temporary_input_path = os.path.join(
+                tmp_in,
+                input_filename,
+            )
 
-        shutil.move(
-            os.path.join(tmp_out, produced[0]),
-            result_path,
-        )
+            shutil.copy2(
+                input_path,
+                temporary_input_path,
+            )
 
-        return result_path
-```
+            # --------------------------------------------------
+            # Convert
+            # --------------------------------------------------
+
+            convert_folder_to_dxf(
+                input_folder=tmp_in,
+                output_folder=tmp_out,
+                timeout=timeout,
+            )
+
+            # --------------------------------------------------
+            # Find generated DXF
+            # --------------------------------------------------
+
+            produced = [
+                filename
+                for filename in os.listdir(tmp_out)
+                if filename.lower().endswith(".dxf")
+            ]
+
+            if not produced:
+
+                raise OdaConversionError(
+                    "No DXF file was produced for:\n"
+                    f"{input_path}"
+                )
+
+            # --------------------------------------------------
+            # Move result next to original DWG
+            # --------------------------------------------------
+
+            result_path = (
+                input_path.rsplit(".", 1)[0]
+                + "_converted.dxf"
+            )
+
+            source_result = os.path.join(
+                tmp_out,
+                produced[0],
+            )
+
+            shutil.move(
+                source_result,
+                result_path,
+            )
+
+            return result_path
