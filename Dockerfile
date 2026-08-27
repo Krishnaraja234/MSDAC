@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
     xauth \
     libxcb-util1 \
+    libxkbcommon0 \
+    libxkbcommon-x11-0 \
     libgl1 \
     libglx-mesa0 \
     fontconfig \
