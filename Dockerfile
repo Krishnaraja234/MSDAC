@@ -38,13 +38,19 @@ RUN wget -q "$ODA_DEB_URL" -O /tmp/odafc.deb \
     && (test -f /usr/lib/x86_64-linux-gnu/libxcb-util.so.0 || \
         ln -s /usr/lib/x86_64-linux-gnu/libxcb-util.so.1 /usr/lib/x86_64-linux-gnu/libxcb-util.so.0)
 
+# Cache-busting: change this value (or Render will pass a fresh one via
+# --build-arg) so the diagnostic step below is forced to actually re-run
+# instead of reusing a cached (and therefore silent) previous result.
+ARG CACHEBUST=20260827
+
 # --- DIAGNOSTIC STEP ---
 # Find the xcb plugin file wherever ODA installed it, ldd it, and
 # print any "=> not found" lines directly into the build log. Also
 # print the full ldd output so we can see it regardless.
 # `|| true` so a missing plugin path doesn't fail the whole build -
 # we want the log output either way.
-RUN echo "=== Locating libqxcb.so ===" \
+RUN echo "cachebust: $CACHEBUST" \
+    && echo "=== Locating libqxcb.so ===" \
     && find / -iname "libqxcb.so*" 2>/dev/null | tee /tmp/qxcb_path.txt \
     && echo "=== ldd output on plugin ===" \
     && ldd "$(head -n1 /tmp/qxcb_path.txt)" 2>&1 | tee /tmp/ldd_out.txt \
