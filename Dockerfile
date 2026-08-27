@@ -4,12 +4,21 @@
 
 FROM python:3.11-slim
 
+# ODA File Converter is a Qt-based GUI app. Running it "headless" in a
+# minimal container caused a chain of Qt/X11 errors (missing xcb,
+# missing xkbcommon, "could not load Qt platform plugin xcb", etc).
+# QT_QPA_PLATFORM=offscreen tells Qt to skip needing a real display
+# entirely, which is the correct fix for a file-conversion tool that
+# never actually needs to show a window.
+ENV QT_QPA_PLATFORM=offscreen
+
 # --- System dependencies ---
-# libxcb-util1/0 and xvfb are required for ODAFileConverter's GUI
-# components to run headlessly on Linux (see ODA's own install notes).
+# These are the Qt/X11 runtime libraries ODA's binary links against.
+# Even with QT_QPA_PLATFORM=offscreen, the libraries still need to be
+# present on disk for Qt to load - offscreen mode just avoids needing
+# an actual display server (Xvfb/X11) at runtime.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
-    xvfb \
     xauth \
     libxcb-util1 \
     libxkbcommon0 \
@@ -44,8 +53,8 @@ COPY . .
 
 EXPOSE 10000
 
-# xvfb-run wraps the app so ODAFileConverter's GUI calls have a virtual
-# display to render to, even though nothing is actually shown.
 # Shell form (not exec-array form) is required here so $PORT expands -
-# Render assigns this dynamically and it won't always be 10000.
-CMD xvfb-run -a waitress-serve --listen=0.0.0.0:${PORT:-10000} app:app
+# Render assigns this dynamically at runtime and it won't always be
+# 10000. xvfb-run is no longer needed now that Qt runs in offscreen
+# mode via QT_QPA_PLATFORM above.
+CMD waitress-serve --listen=0.0.0.0:${PORT:-10000} app:app
