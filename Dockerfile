@@ -1,24 +1,22 @@
 # --- MSDAC Tool: Dockerfile for Render ---
 # Uses Debian slim + Python, installs the Linux .deb build of ODA File
 # Converter (the Windows .exe from before cannot run on Linux at all).
+#
+# NOTE ON QT: this ODA build only ships the "xcb" Qt platform plugin
+# (confirmed via its own error output: "Available platform plugins
+# are: xcb"). QT_QPA_PLATFORM=offscreen is NOT usable here - we must
+# give it a real (virtual) X11 display via xvfb-run instead.
 
 FROM python:3.11-slim
 
-# ODA File Converter is a Qt-based GUI app. Running it "headless" in a
-# minimal container caused a chain of Qt/X11 errors (missing xcb,
-# missing xkbcommon, "could not load Qt platform plugin xcb", etc).
-# QT_QPA_PLATFORM=offscreen tells Qt to skip needing a real display
-# entirely, which is the correct fix for a file-conversion tool that
-# never actually needs to show a window.
-ENV QT_QPA_PLATFORM=offscreen
-
 # --- System dependencies ---
-# These are the Qt/X11 runtime libraries ODA's binary links against.
-# Even with QT_QPA_PLATFORM=offscreen, the libraries still need to be
-# present on disk for Qt to load - offscreen mode just avoids needing
-# an actual display server (Xvfb/X11) at runtime.
+# xvfb provides the virtual display xcb needs. xauth is required by
+# xvfb-run itself (missing it causes "xvfb-run: error: xauth command
+# not found"). libxkbcommon0/-x11-0 and libxcb-util1 are Qt/X11
+# runtime libraries ODA's binary links against directly.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
+    xvfb \
     xauth \
     libxcb-util1 \
     libxkbcommon0 \
@@ -53,8 +51,8 @@ COPY . .
 
 EXPOSE 10000
 
-# Shell form (not exec-array form) is required here so $PORT expands -
+# Shell form (not exec-array form) is required so $PORT expands -
 # Render assigns this dynamically at runtime and it won't always be
-# 10000. xvfb-run is no longer needed now that Qt runs in offscreen
-# mode via QT_QPA_PLATFORM above.
-CMD waitress-serve --listen=0.0.0.0:${PORT:-10000} app:app
+# 10000. xvfb-run wraps the whole app so ODAFileConverter's xcb calls
+# have a virtual display to attach to, even though nothing is shown.
+CMD xvfb-run -a waitress-serve --listen=0.0.0.0:${PORT:-10000} app:app
