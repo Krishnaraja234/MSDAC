@@ -40,9 +40,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-ENV PORT=10000
 EXPOSE 10000
 
 # xvfb-run wraps the app so ODAFileConverter's GUI calls have a virtual
 # display to render to, even though nothing is actually shown.
-CMD ["xvfb-run", "-a", "waitress-serve", "--listen=0.0.0.0:10000", "app:app"]
+# Shell form (not exec-array form) is required here so $PORT expands -
+# Render assigns this dynamically and it won't always be 10000.
+CMD xvfb-run -a waitress-serve --listen=0.0.0.0:${PORT:-10000} app:app
