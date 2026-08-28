@@ -7,6 +7,9 @@ from retemplate_core import apply_new_template
 import threading
 import secrets
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
+
+app.permanent_session_lifetime = timedelta(minutes=45)
 
 import openpyxl
 from flask import Flask, request, jsonify, render_template, send_from_directory, session, redirect, url_for
