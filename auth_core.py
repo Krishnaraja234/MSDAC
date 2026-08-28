@@ -25,7 +25,9 @@ import secrets
 import random
 from werkzeug.security import generate_password_hash, check_password_hash
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "users.db")
+DATA_DIR = os.environ.get("MSDAC_DATA_DIR", os.path.dirname(__file__))
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, "users.db")
 
 DEFAULT_ADMIN_USERID = "admin"
 DEFAULT_ADMIN_PASSWORD = None  # generated fresh on first run, see _seed_admin()
