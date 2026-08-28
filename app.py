@@ -104,8 +104,9 @@ def ask_user_confirmation(job_id, message: str) -> bool:
     return answer
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-JOBS_DIR = os.path.join(APP_DIR, "jobs")
-UPLOADS_DIR = os.path.join(APP_DIR, "uploads")
+DATA_DIR = os.environ.get("MSDAC_DATA_DIR", APP_DIR)
+JOBS_DIR = os.path.join(DATA_DIR, "jobs")
+UPLOADS_DIR = os.path.join(DATA_DIR, "uploads")
 os.makedirs(JOBS_DIR, exist_ok=True)
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
