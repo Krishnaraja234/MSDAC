@@ -888,10 +888,10 @@ def _validate_account_format(userid: str, email: str):
     again at forgot-password (as a fast format check before even
     touching the database).
     """
-    if not userid.startswith(USERID_PREFIX):
-        return f"User ID must start with '{USERID_PREFIX}'."
-    if not email.lower().endswith(EMAIL_DOMAIN):
-        return f"Email must end with '{EMAIL_DOMAIN}'."
+    # if not userid.startswith(USERID_PREFIX):
+    #     return f"User ID must start with '{USERID_PREFIX}'."
+    # if not email.lower().endswith(EMAIL_DOMAIN):
+        # return f"Email must end with '{EMAIL_DOMAIN}'."
     return None
 
 
