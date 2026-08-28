@@ -9,8 +9,6 @@ import secrets
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
-app.permanent_session_lifetime = timedelta(minutes=45)
-
 import openpyxl
 from flask import Flask, request, jsonify, render_template, send_from_directory, session, redirect, url_for
 from functools import wraps
@@ -138,7 +136,7 @@ def _get_or_create_secret_key():
 
 
 app.secret_key = _get_or_create_secret_key()
-
+app.permanent_session_lifetime = timedelta(minutes=45)
 auth_core.init_db()
 
 
