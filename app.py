@@ -124,7 +124,7 @@ def _get_or_create_secret_key():
     env_key = os.environ.get("MSDAC_SECRET_KEY")
     if env_key:
         return env_key
-    key_file = os.path.join(os.path.dirname(__file__), ".secret_key")
+    key_file = os.path.join(os.environ.get("MSDAC_DATA_DIR", os.path.dirname(__file__)), ".secret_key")
     if os.path.exists(key_file):
         with open(key_file, "r") as f:
             return f.read().strip()
