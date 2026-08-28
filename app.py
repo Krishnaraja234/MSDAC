@@ -873,6 +873,7 @@ def login_page():
     session["userid"] = user["userid"]
     session["username"] = user["username"]
     session["is_admin"] = bool(user["is_admin"])
+    session.permanent = True
     return redirect(url_for("index"))
 
 
